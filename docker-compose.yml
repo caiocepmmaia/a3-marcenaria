@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: marcenaria_pg
+    environment:
+      POSTGRES_USER: marcenaria
+      POSTGRES_PASSWORD: marcenaria_pwd
+      POSTGRES_DB: marcenaria
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    volumes:
+      - pg_dados:/var/lib/postgresql/data
+      - ./sql/01_ddl.sql:/docker-entrypoint-initdb.d/01_ddl.sql:ro
+      - ./procedures/postgresql_procedures.sql:/docker-entrypoint-initdb.d/02_procedures.sql:ro
+      - ./sql/02_inserts.sql:/docker-entrypoint-initdb.d/03_inserts.sql:ro
+      - ./sql/04_indices.sql:/docker-entrypoint-initdb.d/04_indices.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U marcenaria -d marcenaria"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  pg_dados:
