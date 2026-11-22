@@ -3,14 +3,15 @@
 -- Arquivo: sql/03_consultas.sql (10 Consultas SQL)
 -- =============================================================================
 
--- Q01: Carteira geral de pedidos com cliente, valor total, valor já pago e saldo devedor
+-- Q01: Carteira geral de pedidos com cliente, valor total, valor já pago, saldo devedor e peso no faturamento (Window Function)
 SELECT p.pedido_id,
        c.nome AS cliente,
        p.status,
        p.data_entrega_prevista,
        p.valor_total,
        COALESCE(SUM(pg.valor_pago), 0.00) AS total_pago,
-       (p.valor_total - COALESCE(SUM(pg.valor_pago), 0.00)) AS saldo_devedor
+       (p.valor_total - COALESCE(SUM(pg.valor_pago), 0.00)) AS saldo_devedor,
+       ROUND((p.valor_total / NULLIF(SUM(p.valor_total) OVER (), 0)) * 100, 2) AS pct_faturamento_total
 FROM pedido p
          JOIN cliente c ON c.cliente_id = p.cliente_id
          LEFT JOIN pagamento pg ON pg.pedido_id = p.pedido_id

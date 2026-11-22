@@ -8,8 +8,8 @@ Sistema de banco de dados relacional em **PostgreSQL 17** integrado a uma aplica
 
     a3-marcenaria/
     ├── der/                          # Diagrama Entidade-Relacionamento (DER) e Fluxograma
-    │   ├── Diagrama ERD de Banco de Dados de Pedidos.png
-    │   └── Fluxograma do Processo de Pedido e Entrega.png
+    │   ├── der_marcenaria.png
+    │   └── fluxograma_regras.png
     ├── sql/
     │   ├── 01_ddl.sql                # Criação das 8 tabelas com PK, FK, UK, CHECK e IDENTITY
     │   ├── 02_inserts.sql            # Massa de dados inicial e cenários de fronteira
@@ -43,6 +43,10 @@ O banco de dados é composto por **8 tabelas** normalizadas com restrições de 
 * **`material`**: Catálogo de insumos utilizados na fabricação (`CHAPA`, `UN`, `M`, `L`, `KG`).
 * **`compra_material`**: Registro de compra de materiais associando pedido, material e fornecedor para apuração de custo direto e margem bruta.
 * **`auditoria_pedido`**: Trilha histórica imutável de criação e transição de status dos pedidos.
+* **Decisões de Modelagem:**
+- **`compra_material` como entidade associativa ternária:** resolve o relacionamento N:M entre pedidos, materiais e fornecedores, permitindo registrar `quantidade` e `custo_unitario` histórico para apurar a margem bruta real de cada encomenda.
+- **Política de exclusão (`CASCADE` vs. `RESTRICT`):** apenas `item_pedido` utiliza `ON DELETE CASCADE` (excluir um pedido em rascunho remove seus itens); `pedido`, `pagamento` e `compra_material` utilizam `ON DELETE RESTRICT` para proteger o histórico financeiro e fiscal.
+- **`auditoria_pedido` desacoplada de FK com cascata:** mantém a trilha imutável de alterações mesmo que registros operacionais sejam arquivados no futuro.
 
 ---
 
@@ -100,5 +104,18 @@ Benchmark executado sobre uma carga sintética de **20.000 pedidos** e **20.000 
 | **Custo Estimado (`HashAggregate`)** | `1040.98..1093.01` | `787.10..839.14` | **-24,4% de custo** |
 | **Tempo Total de Execução** | `9.070 ms` | `7.919 ms` | **-12,7%** |
 
+---
+
+## 6. Uso do Agente de IA
+
+Em conformidade com os requisitos da disciplina, registra-se abaixo como o agente de Inteligência Artificial Generativa (Google Gemini) foi utilizado como ferramenta de apoio técnico durante o desenvolvimento deste projeto, bem como a validação realizada pela equipe:
+
+| Etapa do Projeto | Apoio do Agente de IA | Validação e Autoria da Equipe |
+| :--- | :--- | :--- |
+| **Modelagem & DDL (`01_ddl.sql`)** | Revisão da normalização (3FN), nomenclatura de constraints (`pk_`, `fk_`, `uk_`, `ck_`) e política de integridade referencial (`CASCADE` vs. `RESTRICT`). | Definição do domínio da marcenaria, modelagem das 8 entidades, geração dos diagramas e execução limpa no PostgreSQL 17. |
+| **Regras de Negócio (`postgresql_procedures.sql`)** | Estruturação sintática em *PL/pgSQL* para triggers de auditoria/recálculo e procedures com controle transacional externo e bloqueio `FOR UPDATE`. | Especificação das regras `RN-01` a `RN-05` e validação prática dos cenários de fronteira (`MARCENARIA-001` a `005`). |
+| **Consultas & Performance (`03_consultas.sql`, `carga_e_explain.sql`)** | Apoio na escrita de CTEs, Window Functions (`SUM() OVER`, `RANK() OVER`) e geração da carga sintética de 20.000 registros. | Execução local das 10 consultas, medição real dos planos no `EXPLAIN (ANALYZE, BUFFERS)` e interpretação dos ganhos. |
+| **Aplicação Java (`Main.java`) & Docker (`docker-compose.yml`)** | Estruturação do cliente Maven/JDBC (`PreparedStatement` e `CallableStatement`) e orquestração do container PostgreSQL 17. | Integração ponta a ponta no IntelliJ IDEA, depuração dos fluxos CRUD e conferência dos logs de execução. |
+| **Documentação (`README.md`)** | Organização estrutural da documentação técnica e revisão textual. | Revisão integral do conteúdo, inserção dos diagramas e domínio técnico para a defesa oral. |
 ### Conclusão Técnica do Benchmark
 Com o índice composto `idx_pedido_entrega_status (status, data_entrega_prevista)`, o otimizador substituiu o `Seq Scan` na tabela `pedido` por um `Bitmap Index Scan` seguido de `Bitmap Heap Scan`, reduzindo em **58,9%** o tempo de filtragem dos 4.108 pedidos elegíveis. Na junção com `pagamento`, o SGBD manteve `Seq Scan` + `Hash Join` por ser estatisticamente mais eficiente do que milhares de buscas aleatórias de índice quando ~20% da tabela é retornada.
