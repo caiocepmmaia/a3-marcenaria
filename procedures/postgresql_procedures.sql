@@ -183,3 +183,45 @@ SET status = p_novo_status
 WHERE pedido_id = p_pedido_id;
 END;
 $$;
+
+-- RN-02: a soma dos pagamentos pode chegar ao valor do pedido.
+-- Um lançamento que ultrapasse esse limite deve ser recusado.
+CREATE OR REPLACE FUNCTION public.fn_validar_limite_pagamento()
+RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+    v_total_pedido NUMERIC;
+    v_ja_pago NUMERIC;
+    v_id_pagamento_anterior INTEGER;
+BEGIN
+    -- Duas sessões que pagam o mesmo pedido conferem o saldo uma por vez.
+    SELECT valor_total INTO v_total_pedido
+    FROM public.pedido
+    WHERE pedido_id = NEW.pedido_id
+    FOR UPDATE;
+
+    -- Na edição de uma parcela, o novo valor substitui o antigo.
+    IF TG_OP = 'UPDATE' THEN
+        v_id_pagamento_anterior := OLD.pagamento_id;
+    END IF;
+
+    SELECT COALESCE(SUM(valor_pago), 0) INTO v_ja_pago
+    FROM public.pagamento
+    WHERE pedido_id = NEW.pedido_id
+      AND pagamento_id IS DISTINCT FROM v_id_pagamento_anterior;
+
+    IF v_ja_pago + NEW.valor_pago > v_total_pedido THEN
+        RAISE EXCEPTION
+            'MARCENARIA-003: Pagamento excede o total do pedido. Total: %, já pago: %, tentativa: %.',
+            v_total_pedido, v_ja_pago, NEW.valor_pago
+            USING ERRCODE = 'P0001';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE TRIGGER trg_validar_limite_pagamento
+BEFORE INSERT OR UPDATE OF valor_pago, pedido_id ON public.pagamento
+FOR EACH ROW
+EXECUTE FUNCTION public.fn_validar_limite_pagamento();
