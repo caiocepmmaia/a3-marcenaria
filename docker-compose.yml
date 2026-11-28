@@ -19,6 +19,27 @@ services:
       interval: 5s
       timeout: 5s
       retries: 15
+  testes:
+    image: postgres:17-alpine
+    profiles: ["testes"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGDATABASE: marcenaria
+      PGUSER: marcenaria
+      PGPASSWORD: marcenaria_pwd
+    volumes:
+      - ./tests:/tests:ro
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        for arquivo in /tests/test_*.sql; do
+          echo "Executando $${arquivo}"
+          psql -X -v ON_ERROR_STOP=1 -f "$${arquivo}"
+        done
 
 volumes:
   pg_dados:
